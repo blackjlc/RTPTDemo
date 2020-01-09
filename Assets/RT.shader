@@ -761,7 +761,7 @@
                 scene.spheres[1].enable = true;
                 //getGlassMaterial();
 
-                scene.spheres[2].position = float3(0,.5,-5);
+                scene.spheres[2].position = float3(0 + _SinTime.w,.5,-5);
                 scene.spheres[2].radius = 2.;
                 scene.spheres[2].material = getGlassMaterial();
                 scene.spheres[2].enable = true;
