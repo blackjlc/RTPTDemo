@@ -18,6 +18,12 @@
 
             #include "UnityCG.cginc"
 
+            static const int lightCount= 2;
+            static const int sphereCount = 4;
+            static const int planeCount = 1;
+            static const int cylinderCount = 2;
+            static const int maxBounce = 10;
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -63,11 +69,6 @@
                 bool enable;
             };
 
-            static const int lightCount=2;
-            static const int sphereCount = 3;
-            static const int planeCount = 1;
-            static const int cylinderCount = 2;
-
             struct Scene{
                 float3 ambient;
                 PointLight lights[lightCount];
@@ -84,6 +85,7 @@
             // Contains all information pertaining to a ray/object intersection
             struct HitInfo{
                 bool hit;
+                bool inside;
                 float t;
                 float3 position;
                 float3 normal;
@@ -97,10 +99,11 @@
                 emptyMat.glossiness = 0;
                 emptyMat.kr = 0;
                 emptyMat.kt = 0;
-                emptyMat.IOR = 0;
+                emptyMat.IOR = 1;
 
                 HitInfo empHit;
                 empHit.hit = false;
+                empHit.inside = false;
                 empHit.t = 0;
                 empHit.position = float3(0, 0, 0);
                 empHit.normal = float3(0, 0, 0);
@@ -178,18 +181,18 @@
                         return getEmptyHit();
                     }
                     
-                    float3 hitPosition=ray.origin+smallestTInInterval*ray.direction;
-                    
-                    float3 normal=
-                    length(ray.origin-sphere.position)<sphere.radius+.0001?
-                    -normalize(hitPosition-sphere.position):
-                    normalize(hitPosition-sphere.position);
-                    
                     HitInfo hitInfo;
                     hitInfo.hit = true;
                     hitInfo.t = smallestTInInterval;
-                    hitInfo.position = hitPosition;
-                    hitInfo.normal = normal;
+                    hitInfo.position = ray.origin+smallestTInInterval*ray.direction;
+                    if(length(ray.origin-sphere.position)<sphere.radius+.0001){
+                        hitInfo.normal = -normalize(hitInfo.position-sphere.position);
+                        hitInfo.inside = true;
+                    }
+                    else{
+                        hitInfo.normal = normalize(hitInfo.position-sphere.position);
+                        hitInfo.inside = false;
+                    }
                     hitInfo.material = sphere.material;
                     return hitInfo;
                 }
@@ -218,16 +221,17 @@
                 }
                 //if dot product is 0, the ray is parallel to the plane, which would be considered not hitted.
                 else
-                return getEmptyHit();
+                    return getEmptyHit();
                 //Use the above equation to calculate t
                 t=(dot(normal,float3(0.,-plane.d,0.)-ray.origin))/norDotdir;
                 //Make sure the t is within range
                 if(!isTInInterval(t,tMin,tMax))
-                return getEmptyHit();
+                    return getEmptyHit();
                 //Calculate the hit position with the line equation
                 float3 hitPosition=ray.origin+t*ray.direction;
                 HitInfo hitInfo;
                 hitInfo.hit = true;
+                hitInfo.inside = false;
                 hitInfo.t = t;
                 hitInfo.position = hitPosition;
                 hitInfo.normal = normal;
@@ -277,6 +281,7 @@
                     float3 p2 = cylinder.position + cylinder.direction * dot((hitPosition - cylinder.position), cylinder.direction);
                     // The normal is simply the normalized (hitPosition - p2)
                     float3 normal = normalize(hitPosition - p2);
+                    HitInfo hitInfo;
 
                     // If the ray direction and the normal is pointing to the kind of same direction,
                     // i.e. the angle between them is smaller than 90 degree,
@@ -284,8 +289,10 @@
                     if (dot(normal, ray.direction) > 0.) {
                         //flip the normal
                         normal = -normal;
+                        hitInfo.inside = true;
                     }
-                    HitInfo hitInfo;
+                    else
+                        hitInfo.inside = false;
                     hitInfo.hit = true;
                     hitInfo.t = smallestTInInterval;
                     hitInfo.position = hitPosition;
@@ -364,7 +371,7 @@
                     // the second transparent object. I think I need to keep casting shadow rays until nothing is hitted between the light
                     // and the n-th object, and then calculate the remained light received after passing through n objects.
                 } */
-                for (int i=0;i < 2;i++){
+                for (int i=0;i < 3;i++){
                     if(shadowHitInfo.hit){
                         // But some object is transparent, and light can pass through them
                         if(shadowHitInfo.material.kt>0.0){
@@ -382,9 +389,6 @@
                             visibility = 0.0;
                             break;
                         }
-                        // This isn't near perfect though. What if there is a third object blocking the light from both the original object and
-                        // the second transparent object. I think I need to keep casting shadow rays until nothing is hitted between the light
-                        // and the n-th object, and then calculate the remained light received after passing through n objects.
                     }
                 }
                 
@@ -507,20 +511,13 @@
                     //break;
                     if (!currentHitInfo.hit) break;
                     
-                    // Put your reflection weighting code here
                     currentRay.direction = normalize(currentRay.direction);
                     reflectionWeight *= currentHitInfo.material.kr;
-                    /* if(reflectionWeight < 0.01)
-                    break; */
-                    
                     
                     // Add Fresnel contribution
                     reflectionWeight *= fresnel(currentRay.direction, currentHitInfo.normal, currentHitInfo.material.IOR);
-                    /* if(reflectionWeight < 0.01)
-                    break; */
                     
                     Ray nextRay;
-                    // Put your code to compute the reflection ray here
                     nextRay.origin = currentHitInfo.position;
                     nextRay.direction = currentRay.direction - 2.0 * dot(currentHitInfo.normal, currentRay.direction) * currentHitInfo.normal; 
                         //reflect(currentRay.direction, currentHitInfo.normal));
@@ -542,7 +539,6 @@
                 const int maxRefractionStepCount = 2;
                 for(int i = 0; i < maxRefractionStepCount; i++) {
                     
-                    // Put your refraction weighting code here
                     refractionWeight *= currentHitInfo.material.kt;
                     if(refractionWeight< 0.001)
                     break;
@@ -567,7 +563,6 @@
                         break;
                     
                     Ray nextRay;
-                    // Put your code to compute the refraction ray and track the IOR
                     // In order to acheive the result in the cousework question, a magic number is used
                     currentRay.direction = currentRay.direction * 3.;
                     // I think the below line is more physically accurate
@@ -581,32 +576,6 @@
                         nextRay.origin = currentHitInfo.position;
                         nextRay.direction = reflect(currentRay.direction, currentHitInfo.normal);
                         weight = reflectionWeight;
-                        //Test to pass through the glass ball with initial direction
-                        /* Ray newRay = Ray(initialHitInfo.position, initialRay.direction);
-                        currentHitInfo = intersectScene(scene, newRay, 0.001, 10000.0);
-                        newRay = Ray(currentHitInfo.position, initialRay.direction);
-                        currentHitInfo = intersectScene(scene, newRay, 0.001, 10000.0);
-                        return shade(scene, newRay, currentHitInfo); */
-                        
-                        //Try to pass through the glass ball with first refract direction
-                        /* nextRay = Ray(currentHitInfo.position, currentRay.direction);
-                        result += refractionWeight * shade(scene, nextRay, currentHitInfo);
-                        break; */
-                        
-                        //Try to use some equation from another person
-                        /* nextRay = Ray(currentHitInfo.position,
-                            currentRay.direction * eta + currentHitInfo.normal * (eta * cosa - cosa));
-                            currentHitInfo = intersectScene(scene, nextRay, 0.001, 10000.0);
-                            result += refractionWeight * shade(scene, nextRay, currentHitInfo);
-                            break; */
-                            
-                            //Try to reflect and refract again to get top outside
-                            /* nextRay = Ray(currentHitInfo.position, reflect(currentRay.direction, currentHitInfo.normal));
-                            currentRay = nextRay;
-                            currentHitInfo = intersectScene(scene, currentRay, 0.001, 10000.0);
-                            result += refractionWeight * shade(scene, currentRay, currentHitInfo);
-                            cosa = dot(-currentRay.direction, currentHitInfo.normal);
-                            root = 1.0+eta*eta*(cosa*cosa - 1.0); */
                     }
                     else{
                         nextRay.origin = currentHitInfo.position;
@@ -626,32 +595,6 @@
                 }
                 return result;
             }
-                
-            // --------------------------------------------Table of Material----------------------------------------------------
-            // |  Material      |       Diffuse          | Specular    |   Glossiness   | Reflectance | Transmittance |   IOR  |
-            // -----------------------------------------------------------------------------------------------------------------
-            // |     Paper      |       White(1)         |   None(0)   |    Low, 1      |  Low, 0     |   Low, 0.3    |  1.557 |
-            // -----------------------------------------------------------------------------------------------------------------
-            // |                | Paper is white (normally) and has scattered reflection, hence the low glosinness. A thin     |
-            // |      Why       | sheet of paper can transmitt a small amount of light. The IOR is collected from a paper      |
-            // |                | using streakmem measurement.                                                                 |
-            // -----------------------------------------------------------------------------------------------------------------
-            // |  Steel Mirror  |     Dark Gray(0.1)     |   High(1)   | very High, 100 |  High, 1    |   None, 0     |   2.5  |
-            // -----------------------------------------------------------------------------------------------------------------
-            // |      Why       | Steel Mirror is Gray (normally) and highly reflective with its very smooth surface. It has   |
-            // |                | negligible transmittance and high IOR.                                                       |                                                      |
-            // -----------------------------------------------------------------------------------------------------------------
-            // |     Glass      |        None(0)         |   High(1)   | very High, 100 |  High, 1    |   High, 1     |   1.5  |
-            // -----------------------------------------------------------------------------------------------------------------
-            // |      Why       | Glass is fully transparent (I assumed) and highly reflective with its very smooth surface.   |
-            // |                | It also has high transmittance and a comparatively low IOR.                                  |
-            // -----------------------------------------------------------------------------------------------------------------
-            // | Yellow plastic | Yellow-ish(1, 0.25, 0) |   High(1)   |     High, 10   |  High, 1    |   None, 0     |  1.46  |
-            // -----------------------------------------------------------------------------------------------------------------
-            // |                | Yellow plastic is opaque (I assumed) and highly reflective with its smooth surface (but not  |
-            // |      WHy       | as smooth as the glass or steel). I think its color is more close to the orange color, so I  |
-            // |                | set the diffuse with higher red value. It also has a low IOR.                                |
-            // -----------------------------------------------------------------------------------------------------------------
                 
             Material getDefaultMaterial(){
                 // Update the default material call to match the new parameters of Material
@@ -680,7 +623,7 @@
             Material getPlasticMaterial(){
                 // Replace by your definition of a plastic material
                 Material mat;
-                mat.diffuse = float3(1., .25, 0);
+                mat.diffuse = float3(.25, 1., .2);
                 mat.specular = float3(1,1,1);
                 mat.glossiness = 10;
                 mat.kr = 1;
@@ -689,6 +632,18 @@
                 return mat;
             }
                 
+            Material getPlasticMirrorMaterial() {
+                // Replace by your definition of a steel mirror material
+                Material mat;
+                mat.diffuse = float3(1, .1, 0);
+                mat.specular = float3(1, 1, 1);
+                mat.glossiness = 100;
+                mat.kr = 1;
+                mat.kt = 0;
+                mat.IOR = 2.5;
+                return mat;
+            }
+
             Material getGlassMaterial(){
                 // Replace by your definition of a glass material
                 Material mat;
@@ -739,7 +694,7 @@
             {
                 // Setup scene
                 Scene scene;
-                scene.ambient = float3(.12,.15,.2);
+                scene.ambient = float3(.2,.15,.2);
 
                 // Lights
                 scene.lights[0].position = float3(5,15,-5);
@@ -761,10 +716,15 @@
                 scene.spheres[1].enable = true;
                 //getGlassMaterial();
 
-                scene.spheres[2].position = float3(0 + _SinTime.w,.5,-5);
+                scene.spheres[2].position = float3(5 * _CosTime.w ,.5, -10 + 5 * _SinTime.w); //float3(0 + _SinTime.w,.5,-5)
                 scene.spheres[2].radius = 2.;
                 scene.spheres[2].material = getGlassMaterial();
                 scene.spheres[2].enable = true;
+
+                scene.spheres[3].position = float3(5 * cos(_Time.y+90), .5, -10 + 5 * sin(_Time.y + 90));
+                scene.spheres[3].radius = 2.;
+                scene.spheres[3].material = getPlasticMirrorMaterial();
+                scene.spheres[3].enable = true;
 
                 scene.planes[0].normal = float3(0,1,0);
                 scene.planes[0].d = 4.5;
