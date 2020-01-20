@@ -18,6 +18,16 @@
 
             #include "UnityCG.cginc"
 
+            struct Ray 
+            {
+                float3 o;
+                float3 d;
+            };
+
+            struct Mat {
+                Ray r;
+            };
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -45,7 +55,14 @@
             fixed4 frag(v2f i) : SV_Target
             {
                 //float2 textureCoordinate = i.screenPosition.xy / i.screenPosition.w;
+                Mat c, d;
+                Ray a; a.o = float3(1,0,0); a.d = float3(0,1,0);
+                Ray b; b.o = float3(0,0,0); b.d = float3(0,0,1);
+                c.r = a; d.r = b;
+                c = d;
+                d.r.o.y = 1.;
                 fixed4 col = tex2D(_SubTex, i.uv);
+                col.xyz = c.r.o;
                 return col;
             }
             ENDCG

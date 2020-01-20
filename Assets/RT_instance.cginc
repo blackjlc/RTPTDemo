@@ -494,8 +494,8 @@ float3 bounce(const Scene scene, const Ray currentRay, const HitInfo currentHitI
         if (nextHitInfo.hit)
         {
             result += reflectionWeight * shade(scene, nextRay, nextHitInfo);
-            if (step < maxBounce && reflectionWeight > 0.005)
-                result += bounce2(scene, nextRay, nextHitInfo, reflectionWeight, ++step);
+            //if (step < maxBounce && reflectionWeight > 0.005)
+            //    result += bounce(scene, nextRay, nextHitInfo, reflectionWeight, ++step);
         }
     }
     if (1 - f > 0.05) {
@@ -524,8 +524,8 @@ float3 bounce(const Scene scene, const Ray currentRay, const HitInfo currentHitI
             if (nextHitInfo.hit)
             {
                 result += refractionWeight * shade(scene, nextRay, nextHitInfo);
-                if (step < maxBounce && refractionWeight > 0.005)
-                    result += bounce2(scene, nextRay, nextHitInfo, refractionWeight, ++step);
+                //if (step < maxBounce && refractionWeight > 0.005)
+                //    result += bounce(scene, nextRay, nextHitInfo, refractionWeight, ++step);
             }
         }
     }

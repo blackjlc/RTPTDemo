@@ -12,9 +12,10 @@
         Pass
         {
             CGPROGRAM
+            #pragma target 5.1
             #pragma vertex vert
             #pragma fragment frag
-            #pragma enable_d3d11_debug_symbols
+            //#pragma enable_d3d11_debug_symbols
 
             #include "UnityCG.cginc"
 
@@ -22,7 +23,7 @@
             static const int sphereCount = 4;
             static const int planeCount = 1;
             static const int cylinderCount = 2;
-            static const int maxBounce = 10;
+            static const int MaxBounce = 9;
 
             struct appdata
             {
@@ -490,71 +491,86 @@
                     return (Rs + Rp) / 2.0;
                 }
             }
+            struct RayTrace {
+                Ray r;
+                HitInfo hi;
+                float w;
+            };
 
-            float3 bounce(const Scene scene, const Ray currentRay, const HitInfo currentHitInfo, float weight, int step) {
+            struct Stack {
+                RayTrace rt[MaxBounce];
+            };
+
+            float3 bounce(const Scene scene, const Ray curRay, const HitInfo curHitInfo, const float weight, inout Stack stack, inout int stackPtr) {
                 float3 result = float3(0, 0, 0);
+  
                 //Determine whether the ray is inside the hitted object
                 float IORi;
                 float IORt;
                 //If the ray is inside the object, I assume the ray is refracting out to air
-                if (currentHitInfo.inside) {
-                    IORi = currentHitInfo.material.IOR;
+                if (curHitInfo.inside) {
+                    IORi = curHitInfo.material.IOR;
                     IORt = 1.0;
                 }
                 else {
                     IORi = 1.0;
-                    IORt = currentHitInfo.material.IOR;
+                    IORt = curHitInfo.material.IOR;
                 }
                 float eta = IORi / IORt;
                 // Fresnel
-                float f = fresnel(currentRay.direction, currentHitInfo.normal, eta);
+                float f = fresnel(curRay.direction, curHitInfo.normal, eta);
 
-                if (f > 0.05) {
+                //unroll
+                //if (f > 0.05) {
                     // Compute the reflection
-                    float reflectionWeight = weight * currentHitInfo.material.kr * f;
-
-                    Ray nextRay;
-                    nextRay.origin = currentHitInfo.position;
-                    nextRay.direction = currentRay.direction - 2.0 * dot(currentHitInfo.normal, currentRay.direction) * currentHitInfo.normal;
-                    HitInfo nextHitInfo = intersectScene(scene, nextRay, 0.001, 10000.0);
-                    if (nextHitInfo.hit)
-                    {
-                        result += reflectionWeight * shade(scene, nextRay, nextHitInfo);
-                        if (step < maxBounce && reflectionWeight > 0.005)
-                            result += bounce(scene, nextRay, nextHitInfo, reflectionWeight, ++step);
-                    }
-                }
-                if (1 - f > 0.05) {
+                    float reflectionWeight = weight * curHitInfo.material.kr * f;
+                    //if (reflectionWeight > 0.05) {
+                        Ray nRayL; HitInfo nHitInfoL;
+                        nRayL.origin = curHitInfo.position;
+                        nRayL.direction = curRay.direction - 2.0 * dot(curHitInfo.normal, curRay.direction) * curHitInfo.normal;
+                        nHitInfoL = intersectScene(scene, nRayL, 0.001, 10000.0);
+                        if (nHitInfoL.hit)
+                            reflectionWeight = 0;
+                            result += reflectionWeight * shade(scene, nRayL, nHitInfoL);
+                            if (reflectionWeight > 0.1) {
+                                stack.rt[stackPtr].w = reflectionWeight;
+                                stack.rt[stackPtr].r = nRayL;
+                                stack.rt[stackPtr].hi = nHitInfoL;
+                                stackPtr++;
+                            }
+                        //}
+                    //}
+                //}
+                //unroll
+                //if (1 - f > 0.05) {
                     // Compute the refraction
-                    float refractionWeight = weight * currentHitInfo.material.kt * (1-f);
+                    float refractionWeight = weight * curHitInfo.material.kt * (1-f);
                     
-                    Ray nextRay;
-                    float cosa = dot(-currentRay.direction, currentHitInfo.normal);
+                    float cosa = dot(-curRay.direction, curHitInfo.normal);
                     float root = 1.0 + eta * eta * (cosa * cosa - 1.0);
-                    float w;
-                    if (root < 0.0) {
+                    //if (root < 0.0) {
                     //    // total internal reflection
                     //    nextRay.origin = currentHitInfo.position;
                     //    nextRay.direction = reflect(currentRay.direction, currentHitInfo.normal);
-                    //    w = reflectionWeight;
-                    }
-                    else {
+                    //}
+                   // if(root>=0 && refractionWeight>0.05) {
                         // refraction
-                        nextRay.origin = currentHitInfo.position;
-                        nextRay.direction = -eta * -currentRay.direction + currentHitInfo.normal * (eta * cosa - sqrt(root));
-                        //refract(currentRay.direction, currentHitInfo.normal, eta));
-                        //w = refractionWeight;
-                        //refractionWeight = w;
-
-                        HitInfo nextHitInfo = intersectScene(scene, nextRay, .001, 10000.);
-                        if (nextHitInfo.hit)
-                        {
-                            result += refractionWeight * shade(scene, nextRay, nextHitInfo);
-                            if (step < maxBounce && refractionWeight > 0.005)
-                                result += bounce(scene, nextRay, nextHitInfo, refractionWeight, ++step);
-                        }
-                    }
-                }
+                        Ray nRayR; HitInfo nHitInfoR;
+                        nRayR.origin = curHitInfo.position;
+                        nRayR.direction = -eta * -curRay.direction + curHitInfo.normal * (eta * cosa - sqrt(root));
+                        nHitInfoR = intersectScene(scene, nRayR, .001, 10000.);
+                        if (nHitInfoR.hit)
+                            refractionWeight = 0;
+                            result += refractionWeight * shade(scene, nRayR, nHitInfoR);
+                            if (refractionWeight > 0.1) {
+                                stack.rt[stackPtr].w = refractionWeight;
+                                stack.rt[stackPtr].r = nRayR;
+                                stack.rt[stackPtr].hi = nHitInfoR;
+                                stackPtr++;
+                            }
+                        //}
+                    //}
+                //}
                 return result;
             }
 
@@ -565,14 +581,19 @@
                 HitInfo initialHitInfo = intersectScene(scene, initialRay, 0.001, 10000.0);
                 float3 result = shade(scene, initialRay, initialHitInfo);
                 if (initialHitInfo.hit) {
-                    //int step = 0;
-                    //while (step < MaxBounce) {
-
-                    //    step++;
-                    //}
-                    result += bounce(scene, initialRay, initialHitInfo, 1., 0);
+                    int stackPtr = 0;
+                    Stack stack;
+                    RayTrace t;
+                    t.w = 1;
+                    t.r = initialRay;
+                    t.hi = initialHitInfo;
+                    stack.rt[stackPtr++] = t;
+                    for (int i = 0; i < MaxBounce; i++) {
+                        RayTrace s = stack.rt[--stackPtr];
+                        result += bounce(scene, s.r, s.hi, s.w, stack, stackPtr);
+                    }
                 }
-                
+                    
                 return result;
             }
                 

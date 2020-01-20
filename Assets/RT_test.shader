@@ -19,11 +19,11 @@
             #include "UnityCG.cginc"
             #include "RT_instance.cginc"
 
-            static const int lightCount = 2;
-            static const int sphereCount = 4;
-            static const int planeCount = 1;
-            static const int cylinderCount = 2;
-            static const int maxBounce = 10;
+            //static const int lightCount = 2;
+            //static const int sphereCount = 4;
+            //static const int planeCount = 1;
+            //static const int cylinderCount = 2;
+            //static const int maxBounce = 10;
 
             struct appdata
             {
